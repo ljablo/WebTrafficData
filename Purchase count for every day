@@ -1,0 +1,7 @@
+SELECT
+PARSE_DATE('%Y%m%d', event_date) AS date,
+COUNT(*) AS purchase_count
+FROM `turing_data_analytics.raw_events`
+WHERE event_name = 'purchase'
+GROUP BY date
+ORDER BY date;
