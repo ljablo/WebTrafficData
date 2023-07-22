@@ -1,0 +1,45 @@
+WITH dates_cte AS (
+SELECT
+user_pseudo_id,
+PARSE_DATE('%Y%m%d', event_date) AS date,
+event_name
+FROM turing_data_analytics.raw_events
+WHERE event_name IN ('first_visit', 'purchase')
+),
+first_visit AS (
+SELECT
+user_pseudo_id,
+MIN(date) AS first_visit_date
+FROM dates_cte
+WHERE event_name = 'first_visit'
+GROUP BY user_pseudo_id
+),
+progression_rate_same_day AS (
+SELECT
+date,
+ROUND(COUNT(DISTINCT CASE WHEN event_name = 'purchase' THEN user_pseudo_id END) / COUNT(DISTINCT user_pseudo_id) * 100, 2) AS progression_rate,
+'same_day' AS type
+FROM dates_cte
+LEFT JOIN first_visit USING (user_pseudo_id)
+WHERE date = first_visit_date
+GROUP BY date
+),
+progression_rate_any_time AS (
+SELECT
+date,
+ROUND(COUNT(DISTINCT CASE WHEN event_name = 'purchase' THEN user_pseudo_id END) / COUNT(DISTINCT user_pseudo_id) * 100, 2) AS progression_rate,
+'any_time' AS type
+FROM dates_cte
+JOIN first_visit USING (user_pseudo_id)
+WHERE date >= first_visit_date
+AND event_name IN ('first_visit', 'purchase')
+GROUP BY date
+)
+SELECT *
+FROM (
+SELECT * FROM progression_rate_same_day
+UNION ALL
+SELECT * FROM progression_rate_any_time
+)
+PIVOT (MAX(progression_rate) FOR type IN ('same_day', 'any_time'))
+ORDER BY date
