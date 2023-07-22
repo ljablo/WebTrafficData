@@ -1,0 +1,49 @@
+WITH first_visit AS (
+  SELECT
+    user_pseudo_id,
+    PARSE_DATE('%Y%m%d', event_date) AS date,
+    MIN(TIMESTAMP_SECONDS(CAST(event_timestamp / 1000000 AS INT64))) AS first_visit_timestamp
+  FROM
+    `turing_data_analytics.raw_events`
+  WHERE
+    event_name = 'first_visit'
+  GROUP BY
+    user_pseudo_id,
+    date
+),
+
+purchase AS (
+  SELECT
+    user_pseudo_id,
+    PARSE_DATE('%Y%m%d', event_date) AS date,
+    MIN(TIMESTAMP_SECONDS(CAST(event_timestamp / 1000000 AS INT64))) AS purchase_timestamp
+  FROM
+    `turing_data_analytics.raw_events`
+  WHERE
+    event_name = 'purchase'
+  GROUP BY
+    user_pseudo_id,
+    date
+)
+
+SELECT
+  date,
+  ROUND(AVG(median_duration_in_minutes), 1) AS median_duration_in_minutes
+FROM (
+  SELECT
+    date,
+    user_pseudo_id,
+    TIMESTAMP_DIFF(purchase_timestamp, first_visit_timestamp, MINUTE) AS median_duration_in_minutes,
+    NTILE(2) OVER (PARTITION BY date ORDER BY TIMESTAMP_DIFF(purchase_timestamp, first_visit_timestamp, MINUTE)) AS nt
+  FROM
+    first_visit
+  JOIN
+    purchase
+  USING
+    (user_pseudo_id, date)
+)
+WHERE nt = 2
+GROUP BY
+  date
+ORDER BY
+  date;
