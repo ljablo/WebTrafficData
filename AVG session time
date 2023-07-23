@@ -1,0 +1,44 @@
+-- Calculate average session time per event date in minutes using user_pseudo_id
+SELECT
+event_date,
+AVG(session_time / 60) AS avg_session_time
+FROM (
+-- For each user and event date, calculate the session time as the difference between the first and last event timestamps
+SELECT
+PARSE_DATE("%Y%m%d", event_date) AS event_date,
+user_pseudo_id,
+TIMESTAMP_DIFF(MAX(TIMESTAMP_SECONDS(CAST(event_timestamp / 1000000 AS INT64))), MIN(TIMESTAMP_SECONDS(CAST(event_timestamp / 1000000 AS INT64))), SECOND) AS session_time
+FROM
+turing_data_analytics.raw_events AS events
+WHERE
+-- Filter only the events that indicate user engagement
+event_name IN ('user_engagement', 'scroll', 'page_view', 'view_promotion', 'session_start', 'view_search_results', 'first_visit', 'view_item', 'add_to_cart', 'begin_checkout', 'add_shipping_info', 'select_item', 'add_payment_info', 'select_promotion', 'purchase', 'click', 'view_item_list')
+AND NOT EXISTS ( -- Exclude the events that occur after a purchase by the same user on the same date
+SELECT
+1
+FROM
+turing_data_analytics.raw_events AS purchases
+WHERE
+events.user_pseudo_id = purchases.user_pseudo_id
+AND events.event_date = purchases.event_date
+AND purchases.event_name = 'purchase'
+AND TIMESTAMP_SECONDS(CAST(purchases.event_timestamp / 1000000 AS INT64)) < TIMESTAMP_SECONDS(CAST(events.event_timestamp / 1000000 AS INT64))
+)
+AND NOT EXISTS ( -- Exclude the events that occur after a 30-minute gap by the same user on the same date
+SELECT
+1
+FROM
+turing_data_analytics.raw_events AS gaps
+WHERE
+events.user_pseudo_id = gaps.user_pseudo_id
+AND events.event_date = gaps.event_date
+AND TIMESTAMP_DIFF(TIMESTAMP_SECONDS(CAST(gaps.event_timestamp / 1000000 AS INT64)), TIMESTAMP_SECONDS(CAST(events.event_timestamp / 1000000 AS INT64)), MINUTE) > 30
+)
+GROUP BY
+event_date,
+user_pseudo_id
+)
+GROUP BY
+event_date
+ORDER BY
+event_date
